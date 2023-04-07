@@ -8,10 +8,15 @@ router = APIRouter()
 
 
 @router.get("", response_model=Models)
-def get_models(
+def handle_get_models(
     context: Context = Depends(get_loaded_context),
 ) -> Models:
     """Get a mapping of model names to model metadata"""
+
+    return get_models(context)
+
+
+def get_models(context: Context) -> Models:
     models = {
         model.name: Model(
             name=model.name,
