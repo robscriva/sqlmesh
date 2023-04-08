@@ -42,6 +42,13 @@ setup(
         "sqlglot>=11.4.4",
     ],
     extras_require={
+        "bigquery": [
+            "google-cloud-bigquery[pandas]",
+        ],
+        "databricks": [
+            "databricks-sql-connector",
+            "databricks-cli",
+        ],
         "dev": [
             f"apache-airflow=={os.environ.get('AIRFLOW_VERSION', '2.3.3')}",
             "autoflake==1.7.7",
@@ -71,27 +78,23 @@ setup(
             "types-pytz",
             "types-requests==2.28.8",
         ],
+        "dbt": [
+            "dbt-core",
+        ],
+        "postgres": [
+            "psycopg2",
+        ],
+        "redshift": [
+            "redshift_connector",
+        ],
+        "snowflake": [
+            "snowflake-connector-python[pandas]",
+        ],
         "web": [
             "fastapi==0.89.1",
             "hyperscript==0.0.1",
             "pyarrow==11.0.0",
             "uvicorn==0.20.0",
-        ],
-        "snowflake": [
-            "snowflake-connector-python[pandas]",
-        ],
-        "bigquery": [
-            "google-cloud-bigquery[pandas]",
-        ],
-        "databricks": [
-            "databricks-sql-connector",
-            "databricks-cli",
-        ],
-        "redshift": [
-            "redshift_connector",
-        ],
-        "dbt": [
-            "dbt-core",
         ],
     },
     classifiers=[
