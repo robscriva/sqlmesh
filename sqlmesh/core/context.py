@@ -65,7 +65,7 @@ from sqlmesh.core.snapshot import (
     to_table_mapping,
 )
 from sqlmesh.core.state_sync import StateReader, StateSync
-from sqlmesh.core.test import run_all_model_tests, run_model_tests
+from sqlmesh.core.test import get_all_model_tests, run_model_tests, run_tests
 from sqlmesh.core.user import User
 from sqlmesh.utils import UniqueKeyDict, sys_path
 from sqlmesh.utils.dag import DAG
@@ -194,7 +194,7 @@ class Context(BaseContext):
         dialect: str = "",
         physical_schema: str = "",
         snapshot_ttl: str = "",
-        path: str = "",
+        paths: t.Union[str, t.Iterable] = "",
         config: t.Optional[t.Union[Config, str]] = None,
         connection: t.Optional[str] = None,
         test_connection: t.Optional[str] = None,
@@ -205,9 +205,20 @@ class Context(BaseContext):
         users: t.Optional[t.List[User]] = None,
     ):
         self.console = console or get_console()
-        self.path = Path(path).absolute()
-        if not self.path.is_dir():
-            raise ConfigError(f"{path} is not a directory")
+        self.paths = [
+            Path(path).absolute() for path in ([paths] if isinstance(paths, str) else list(paths))
+        ]
+
+        for path in self.paths:
+            if not path.is_dir():
+                raise ConfigError(f"{path} is not a directory")
+
+        self.sqlmesh_path = Path.home() / ".sqlmesh"
+        self.audits_suffix = "audits"
+        self.hooks_suffix = "hooks"
+        self.macros_suffix = "macros"
+        self.models_suffix = "macros"
+        self.tests_suffix = "tests"
 
         self.config = self._load_config(config or "config")
 
@@ -341,34 +352,6 @@ class Context(BaseContext):
         return self._state_reader
 
     @property
-    def sqlmesh_path(self) -> Path:
-        """Path to the SQLMesh home directory."""
-        return Path.home() / ".sqlmesh"
-
-    @property
-    def models_directory_path(self) -> Path:
-        """Path to the directory where the models are defined"""
-        return self.path / "models"
-
-    @property
-    def macro_directory_path(self) -> Path:
-        """Path to the directory where macros are defined"""
-        return self.path / "macros"
-
-    @property
-    def hook_directory_path(self) -> Path:
-        """Path to the directory where hooks are defined"""
-        return self.path / "hooks"
-
-    @property
-    def test_directory_path(self) -> Path:
-        return self.path / "tests"
-
-    @property
-    def audits_directory_path(self) -> Path:
-        return self.path / "audits"
-
-    @property
     def ignore_patterns(self) -> t.List[str]:
         return c.IGNORE_PATTERNS + self.config.ignore_patterns
 
@@ -379,7 +362,7 @@ class Context(BaseContext):
 
     def load(self) -> Context:
         """Load all files in the context's path."""
-        with sys_path(self.path):
+        with sys_path(*self.paths):
             project = self._loader.load(self)
             self._hooks = project.hooks
             self._macros = project.macros
@@ -749,13 +732,15 @@ class Context(BaseContext):
                     ignore_patterns=self.ignore_patterns,
                 )
             else:
-                result = run_all_model_tests(
-                    path=self.test_directory_path,
+                result = run_tests(
+                    get_all_model_tests(
+                        *[path / self.tests_suffix for path in self.paths],
+                        patterns=match_patterns,
+                        ignore_patterns=self.ignore_patterns,
+                    ),
                     snapshots=self.local_snapshots,
                     engine_adapter=self._test_engine_adapter,
                     verbosity=verbosity,
-                    patterns=match_patterns,
-                    ignore_patterns=self.ignore_patterns,
                 )
         finally:
             self._test_engine_adapter.close()
@@ -864,13 +849,16 @@ class Context(BaseContext):
         if isinstance(config, Config):
             return config
 
-        lookup_paths = [
-            self.sqlmesh_path / "config.yml",
-            self.sqlmesh_path / "config.yaml",
-            self.path / "config.py",
-            self.path / "config.yml",
-            self.path / "config.yaml",
-        ]
+        lookup_paths = [self.sqlmesh_path / "config.yml", self.sqlmesh_path / "config.yaml"]
+
+        for path in self.paths:
+            lookup_paths.extend(
+                [
+                    path / "config.py",
+                    path / "config.yml",
+                    path / "config.yaml",
+                ]
+            )
         return load_config_from_paths(*lookup_paths, config_name=config)
 
     def _add_model_to_dag(self, model: Model) -> None:

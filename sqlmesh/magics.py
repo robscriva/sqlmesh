@@ -46,11 +46,11 @@ class SQLMeshMagics(Magics):
         )
 
     @magic_arguments()
-    @argument("path", type=str, help="The path to the SQLMesh project.")
+    @argument("paths", type=str, nargs="+", help="The path to the SQLMesh project.")
     @line_magic
-    def context(self, path: str) -> None:
+    def context(self, paths: str) -> None:
         """Sets the context in the user namespace."""
-        self._shell.user_ns["context"] = Context(path=path)
+        self._shell.user_ns["context"] = Context(paths=paths)
 
     @magic_arguments()
     @argument("model", type=str, help="The model.")
@@ -120,7 +120,7 @@ class SQLMeshMagics(Magics):
             raise MagicError("Must provide either test name or `--ls` to list tests")
 
         model_test_metadatas = get_all_model_tests(
-            self._context.test_directory_path,
+            *[path / self._context.tests_suffix for path in self._context.paths],
             ignore_patterns=self._context.ignore_patterns,
         )
         tests: t.Dict[str, t.Dict[str, ModelTestMetadata]] = defaultdict(dict)
