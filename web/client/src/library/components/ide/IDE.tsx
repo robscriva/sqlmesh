@@ -9,6 +9,8 @@ import {
   apiCancelFiles,
   useApiModels,
   apiCancelModels,
+  useApiDag,
+  apiCancelDag,
 } from '../../../api'
 import { EnumPlanAction, useStorePlan } from '../../../context/plan'
 import { useChannelEvents } from '../../../api/channels'
@@ -24,7 +26,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import ModalSidebar from '../modal/ModalDrawer'
 import Editor from '../editor/Editor'
 import FileTree from '../fileTree/FileTree'
-import { type Models } from '@api/client'
 
 const Plan = lazy(async () => await import('../plan/Plan'))
 const Graph = lazy(async () => await import('../graph/Graph'))
@@ -39,6 +40,7 @@ export function IDE(): JSX.Element {
     s => s.addSyncronizedEnvironments,
   )
   const setModels = useStoreContext(s => s.setModels)
+  const setLineage = useStoreContext(s => s.setLineage)
 
   const activePlan = useStorePlan(s => s.activePlan)
   const setPlanAction = useStorePlan(s => s.setAction)
@@ -50,6 +52,7 @@ export function IDE(): JSX.Element {
 
   const [subscribe] = useChannelEvents()
 
+  const { data: dataDag, refetch: getDag } = useApiDag()
   const { data: dataModels, refetch: getModels } = useApiModels()
   const { data: project, refetch: getFiles } = useApiFiles()
   const { data: contextEnvironemnts, refetch: getEnvironments } =
@@ -65,26 +68,34 @@ export function IDE(): JSX.Element {
   const debouncedGetModels = useCallback(debounceAsync(getModels, 1000, true), [
     getModels,
   ])
+  const debouncedGetDag = useCallback(debounceAsync(getDag, 1000, true), [
+    getModels,
+  ])
 
   useEffect(() => {
     const unsubscribeTasks = subscribe('tasks', updateTasks)
-    const unsubscribeModels = subscribe('models', updateModels)
+    const unsubscribeModels = subscribe('models', setModels)
+    const unsubscribeLineage = subscribe('lineage', setLineage)
 
     void debouncedGetEnvironemnts()
     void debouncedGetFiles()
     void debouncedGetModels()
+    void debouncedGetDag()
 
     return () => {
       debouncedGetEnvironemnts.cancel()
       debouncedGetFiles.cancel()
       debouncedGetModels.cancel()
+      debouncedGetDag.cancel()
 
       apiCancelModels(client)
       apiCancelFiles(client)
       apiCancelGetEnvironments(client)
+      apiCancelDag(client)
 
       unsubscribeTasks?.()
       unsubscribeModels?.()
+      unsubscribeLineage?.()
     }
   }, [])
 
@@ -99,8 +110,12 @@ export function IDE(): JSX.Element {
   }, [contextEnvironemnts])
 
   useEffect(() => {
-    updateModels(dataModels)
+    setModels(dataModels)
   }, [dataModels])
+
+  useEffect(() => {
+    setLineage(dataDag)
+  }, [dataDag])
 
   function showGraph(): void {
     setIsGraphOpen(true)
@@ -112,11 +127,6 @@ export function IDE(): JSX.Element {
 
   function closeModal(): void {
     setIsClosingModal(true)
-  }
-
-  function updateModels(data?: Models): void {
-    console.log('updateModels', data)
-    setModels(data?.models)
   }
 
   return (

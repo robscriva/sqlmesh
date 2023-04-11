@@ -11,7 +11,7 @@ import {
 } from '@codemirror/view'
 import { type Model } from '~/api/client'
 import { type ModelFile } from '~/models'
-import { isNil } from '~/utils'
+import { isArrayEmpty, isNil } from '~/utils'
 
 import { useSqlMeshExtension } from './SqlMeshDialect'
 
@@ -21,36 +21,14 @@ export function SqlMeshModel(models: Map<string, Model>): Extension {
   return ViewPlugin.fromClass(
     class SqlMeshModelView {
       decorations: DecorationSet = Decoration.set([])
+      constructor(readonly view: EditorView) {
+        this.decorations = getDecorations(models, view)
+      }
+
       update(viewUpdate: ViewUpdate): void {
-        const decorations: any[] = []
-
-        for (const range of viewUpdate.view.visibleRanges) {
-          syntaxTree(viewUpdate.view.state).iterate({
-            from: range.from,
-            to: range.to,
-            enter({ from, to }) {
-              // In case model name represented in qoutes
-              // like in python files , we need to remove qoutes
-              const model = viewUpdate.view.state.doc
-                .sliceString(from, to)
-                .replaceAll('"', '')
-                .replaceAll("'", '')
-
-              if (isNil(models.get(model))) return true
-
-              const decoration = Decoration.mark({
-                attributes: {
-                  class: 'sqlmesh-model',
-                  model,
-                },
-              }).range(from, to)
-
-              decorations.push(decoration)
-            },
-          })
+        if (viewUpdate.docChanged) {
+          this.decorations = getDecorations(models, viewUpdate.view)
         }
-
-        this.decorations = Decoration.set(decorations)
       }
     },
     {
@@ -71,7 +49,12 @@ export function events(
   })
 }
 
-export function HoverTooltip(models: Map<string, Model>): Extension {
+export function HoverTooltip(
+  models: Map<string, Model>,
+  graph: Record<string, { upstream: string[]; downstream: string[] }>,
+  files: Map<ID, ModelFile>,
+  selectFile: (file: ModelFile) => void,
+): Extension {
   return hoverTooltip(
     (view: EditorView, pos: number, side: number): Tooltip | null => {
       const { from, to, text } = view.state.doc.lineAt(pos)
@@ -96,24 +79,106 @@ export function HoverTooltip(models: Map<string, Model>): Extension {
         above: true,
         create() {
           const dom = document.createElement('div')
-          const template = `
-          <div class="flex items-center">
-            <span>Model Name:</span>
-            <span class="px-2 py-1 inline-block ml-1 bg-alternative-100 text-alternative-500 rounded">${model.name}</span>
-          </div>
-        `
 
+          dom.addEventListener('click', handleClick)
+
+          const template = `
+            <div>
+              <div class="flex items-center">
+                <span>Model Name:</span>
+                <span class="px-2 py-1 inline-block ml-1 bg-alternative-100 text-alternative-500 rounded text-secondary-500 dark:text-primary-500">${
+                  model.name
+                }</span>
+              </div>
+              ${getModelDependenciesListHTML(
+                'Children Models',
+                graph[model.name]?.upstream,
+              )}
+              ${getModelDependenciesListHTML(
+                'Parent Models',
+                graph[model.name]?.downstream,
+              )}
+            </div>
+          `
           dom.className =
             'text-xs font-bold px-3 py-3 bg-white border-2 border-secondary-100 rounded outline-none shadow-lg mb-2'
 
           dom.innerHTML = template
 
-          return { dom }
+          return {
+            dom,
+            destroy() {
+              dom.removeEventListener('click', handleClick)
+            },
+          }
+
+          function handleClick(event: MouseEvent): void {
+            handleClickOnSqlMeshModel(event, models, files, selectFile)
+          }
         },
       }
     },
     { hoverTime: 50 },
   )
+}
+
+function getDecorations(
+  models: Map<string, Model>,
+  view: EditorView,
+): DecorationSet {
+  const decorations: any = []
+
+  for (const range of view.visibleRanges) {
+    syntaxTree(view.state).iterate({
+      from: range.from,
+      to: range.to,
+      enter({ from, to }) {
+        // In case model name represented in qoutes
+        // like in python files , we need to remove qoutes
+        const model = view.state.doc
+          .sliceString(from, to)
+          .replaceAll('"', '')
+          .replaceAll("'", '')
+
+        if (isNil(models.get(model))) return true
+
+        const decoration = Decoration.mark({
+          attributes: {
+            class: 'sqlmesh-model',
+            model,
+          },
+        }).range(from, to)
+
+        decorations.push(decoration)
+      },
+    })
+  }
+
+  return Decoration.set(decorations)
+}
+
+function getModelDependenciesListHTML(
+  title: string,
+  dependencies?: string[],
+): string {
+  if (dependencies == null || isArrayEmpty(dependencies)) return ''
+
+  const list = dependencies.map(
+    modelName => `<li  class='px-2 mb-1'>
+    <span model="${modelName}" class='text-secondary-500 dark:text-primary-500 inline-block pb-0.5 border-b cursor-pointer'>
+      ${modelName}
+    </span>
+  </li>`,
+  )
+
+  return `
+    <div class='my-2'>
+      <h3>${title}</h3>
+      <ul>
+        ${list?.join('')}
+      </ul>
+    </div>
+  `
 }
 
 function handleClickOnSqlMeshModel(

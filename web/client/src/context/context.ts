@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import {
   type Model,
-  type ModelsModels,
   type ContextEnvironmentEnd,
   type ContextEnvironmentStart,
   type Environment,
@@ -19,7 +18,10 @@ interface ContextStore {
   initialStartDate?: ContextEnvironmentStart
   initialEndDate?: ContextEnvironmentEnd
   models: Map<string, Model>
-  setModels: (models?: ModelsModels) => void
+  lineage?: Record<string, string[]>
+  graph?: Record<string, { upstream: string[]; downstream: string[] }>
+  setLineage: (lineage?: Record<string, string[]>) => void
+  setModels: (models?: Model[]) => void
   isExistingEnvironment: (
     environment: ModelEnvironment | EnvironmentName,
   ) => boolean
@@ -46,17 +48,42 @@ export const useStoreContext = create<ContextStore>((set, get) => ({
   initialStartDate: undefined,
   initialEndDate: undefined,
   models: new Map(),
-  setModels(models = {}) {
-    set(() => {
-      return {
-        models: Object.values(models).reduce((acc, model) => {
-          acc.set(model.name, model)
-          acc.set(model.path, model)
+  lineage: undefined,
+  setLineage(lineage) {
+    const graph: Record<string, { upstream: string[]; downstream: string[] }> =
+      {}
 
-          return acc
-        }, new Map()),
+    for (const modelName in lineage) {
+      const upstream = lineage[modelName] ?? []
+
+      graph[modelName] = {
+        upstream,
+        downstream: [],
       }
+    }
+
+    for (const modelName in graph) {
+      const { upstream = [] } = graph[modelName] ?? {}
+
+      upstream.forEach(upstreamModelName => {
+        graph[upstreamModelName]?.downstream.push(modelName)
+      })
+    }
+
+    set({
+      graph,
+      lineage,
     })
+  },
+  setModels(models = []) {
+    set(() => ({
+      models: models.reduce((acc, model) => {
+        acc.set(model.name, model)
+        acc.set(model.path, model)
+
+        return acc
+      }, new Map()),
+    }))
   },
   getNextEnvironment() {
     return get().environments.values().next().value

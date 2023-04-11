@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo } from 'react'
 import ReactFlow, {
   Controls,
   Background,
@@ -10,20 +10,20 @@ import ReactFlow, {
   BackgroundVariant,
 } from 'reactflow'
 import { Button } from '../button/Button'
-import { useApiDag } from '../../../api'
 import 'reactflow/dist/base.css'
 import { getNodesAndEdges } from './help'
 import { isFalse, isNil } from '../../../utils'
+import { useStoreContext } from '@context/context'
 
 export default function Graph({ closeGraph }: any): JSX.Element {
-  const { data } = useApiDag()
-  const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] }>()
+  const lineage = useStoreContext(s => s.lineage)
+
   const nodeTypes = useMemo(() => ({ model: ModelNode }), [])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
   useEffect(() => {
-    if (isNil(data)) return
+    if (isNil(lineage)) return
 
     let active = true
 
@@ -34,22 +34,14 @@ export default function Graph({ closeGraph }: any): JSX.Element {
     }
 
     async function load(): Promise<void> {
-      setGraph(undefined)
+      const { nodes, edges }: any = await getNodesAndEdges({ data: lineage })
 
-      const graph = await getNodesAndEdges({ data })
+      if (isFalse(active) || nodes == null || edges == null) return
 
-      if (isFalse(active)) return
-
-      setGraph(graph)
+      setNodes(nodes)
+      setEdges(edges)
     }
-  }, [data])
-
-  useEffect(() => {
-    if (graph == null) return
-
-    setNodes(graph.nodes)
-    setEdges(graph.edges)
-  }, [graph])
+  }, [lineage])
 
   return (
     <div className="px-2 py-1 w-full h-[90vh]">

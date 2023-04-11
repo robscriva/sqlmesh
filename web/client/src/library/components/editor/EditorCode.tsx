@@ -16,13 +16,7 @@ import {
 import { dracula, tomorrow } from 'thememirror'
 import { useColorScheme, EnumColorScheme } from '~/context/theme'
 
-import {
-  apiCancelFiles,
-  apiCancelPlanRun,
-  useApiFileByPath,
-  useApiPlanRun,
-  useMutationApiSaveFile,
-} from '~/api'
+import { apiCancelFiles, useApiFileByPath, useMutationApiSaveFile } from '~/api'
 import {
   debounceAsync,
   debounceSync,
@@ -38,6 +32,7 @@ export default function CodeEditor({ tab }: { tab: EditorTab }): JSX.Element {
   const [SqlMeshDialect, SqlMeshDialectCleanUp] = useSqlMeshExtension()
 
   const models = useStoreContext(s => s.models)
+  const graph = useStoreContext(s => s.graph)
 
   const files = useStoreFileTree(s => s.files)
   const selectFile = useStoreFileTree(s => s.selectFile)
@@ -78,7 +73,7 @@ export default function CodeEditor({ tab }: { tab: EditorTab }): JSX.Element {
 
     return [
       mode === EnumColorScheme.Dark ? dracula : tomorrow,
-      HoverTooltip(models),
+      graph != null && HoverTooltip(models, graph, files, selectFile),
       events(models, files, selectFile),
       SqlMeshModel(models),
       tab.file.extension === '.py' && python(),
@@ -86,7 +81,7 @@ export default function CodeEditor({ tab }: { tab: EditorTab }): JSX.Element {
       showSqlMeshDialect &&
         SqlMeshDialect(models, tab.file, sqlDialectOptions, dialectsTitles),
     ].filter(Boolean) as Extension[]
-  }, [tab.file, models, mode, sqlDialectOptions, files, dialectsTitles])
+  }, [tab.file, models, mode, sqlDialectOptions, files, dialectsTitles, graph])
 
   const keymaps = useMemo(
     () => [
@@ -197,7 +192,6 @@ function CodeEditorFileRemote({
   const client = useQueryClient()
 
   const models = useStoreContext(s => s.models)
-  const environment = useStoreContext(s => s.environment)
 
   const engine = useStoreEditor(s => s.engine)
   const refreshTab = useStoreEditor(s => s.refreshTab)
@@ -208,16 +202,6 @@ function CodeEditorFileRemote({
   const mutationSaveFile = useMutationApiSaveFile(client, {
     onSuccess: saveChangeSuccess,
   })
-
-  const { refetch: planRun } = useApiPlanRun(environment.name, {
-    planOptions: {
-      skip_tests: true,
-    },
-  })
-
-  const debouncedPlanRun = useCallback(debounceAsync(planRun, 1000, true), [
-    planRun,
-  ])
 
   const debouncedSaveChange = useCallback(
     debounceSync(saveChange, 1000, true),
@@ -250,10 +234,8 @@ function CodeEditorFileRemote({
 
   useEffect(() => {
     return () => {
-      debouncedPlanRun.cancel()
       debouncedGetFileContent.cancel()
 
-      apiCancelPlanRun(client)
       apiCancelFiles(client)
     }
   }, [])
@@ -312,8 +294,6 @@ function CodeEditorFileRemote({
     tab.isSaved = true
 
     refreshTab()
-
-    void debouncedPlanRun()
   }
 
   return (

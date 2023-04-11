@@ -24,14 +24,16 @@ import {
   applyApiCommandsApplyPost,
   cancelPlanApiPlanCancelPost,
   type BodyApplyApiCommandsApplyPostCategories,
-  getModelsApiModelsGet,
-  type Models,
+  handleGetModelsApiModelsGet,
+  type Model,
 } from './client'
 
 export function useApiDag(): UseQueryResult<DagApiCommandsDagGet200> {
   return useQuery({
     queryKey: ['/api/commands/dag'],
     queryFn: async ({ signal }) => await dagApiCommandsDagGet({ signal }),
+    cacheTime: 0,
+    enabled: false,
   })
 }
 
@@ -45,10 +47,11 @@ export function useApiFileByPath(path: string): UseQueryResult<File> {
   })
 }
 
-export function useApiModels(): UseQueryResult<Models> {
+export function useApiModels(): UseQueryResult<Model[]> {
   return useQuery({
     queryKey: ['/api/models'],
-    queryFn: async ({ signal }) => await getModelsApiModelsGet({ signal }),
+    queryFn: async ({ signal }) =>
+      await handleGetModelsApiModelsGet({ signal }),
     cacheTime: 0,
     enabled: false,
   })
@@ -157,6 +160,10 @@ export async function apiCancelPlanApply(client: QueryClient): Promise<void> {
   void client.cancelQueries({ queryKey: ['/api/commands/apply'] })
 
   return await cancelPlanApiPlanCancelPost()
+}
+
+export function apiCancelDag(client: QueryClient): void {
+  void client.cancelQueries({ queryKey: ['/api/dag'] })
 }
 
 export function apiCancelPlanRun(client: QueryClient): void {
