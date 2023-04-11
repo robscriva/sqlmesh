@@ -163,6 +163,10 @@ class SqlMeshLoader(Loader):
         models: UniqueKeyDict = UniqueKeyDict("models")
         for path in self._glob_path(self._context.models_directory_path, ".sql"):
             self._track_file(path)
+
+            if os.path.getsize(path) == 0:
+                continue
+
             with open(path, "r", encoding="utf-8") as file:
                 try:
                     expressions = parse(file.read(), default_dialect=self._context.dialect)
